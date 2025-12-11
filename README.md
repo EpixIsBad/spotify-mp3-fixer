@@ -4,6 +4,8 @@ A desktop application that fixes MP3 sample rate issues that cause playback prob
 
 **This was made with the help of AI (claude), mainly for the UI/Electron portion, some code tune up, FFmpeg, and any busy work like this README, Directions, Comments, etc.**
 
+*This is also my first public project so if theres something related to the program or this github that could be better let me know!!!!*
+
 ![Screenshot](screenshot.png)
 
 ## The Problem
