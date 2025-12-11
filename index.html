@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
   <title>MP3 Sample Rate Fixer</title>
   <style>
     * {
@@ -214,6 +214,31 @@
 
     .file-item:last-child {
       border-bottom: none;
+    }
+
+    .file-album-art {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      margin-right: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .file-album-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .file-album-art svg {
+      width: 20px;
+      height: 20px;
+      opacity: 0.4;
     }
 
     .file-name {
@@ -502,6 +527,31 @@
       margin-right: 14px;
       cursor: pointer;
       accent-color: #00d9ff;
+    }
+
+    .selection-item .album-art {
+      width: 48px;
+      height: 48px;
+      border-radius: 4px;
+      margin-right: 14px;
+      background: rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .selection-item .album-art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .selection-item .album-art svg {
+      width: 24px;
+      height: 24px;
+      opacity: 0.4;
     }
 
     .selection-item .file-info {

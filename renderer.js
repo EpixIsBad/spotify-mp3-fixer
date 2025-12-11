@@ -155,8 +155,15 @@ function updateFileList() {
       alreadyOk++;
     }
 
+    const albumArtHtml = file.albumArt
+      ? `<img src="${file.albumArt}" alt="Album art">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+        </svg>`;
+
     html += `
       <div class="file-item">
+        <div class="file-album-art">${albumArtHtml}</div>
         <div class="file-name" title="${file.file}">${file.file}</div>
         <div class="file-rate ${rateClass}">${rateText}</div>
       </div>
@@ -203,9 +210,16 @@ function openSelectionModal() {
     const rateText = file.sampleRate ? `${file.sampleRate} Hz` : 'Unknown';
     const statusText = needsFixing ? `${rateText} → ${targetRate} Hz` : `${rateText} (OK)`;
 
+    const albumArtHtml = file.albumArt
+      ? `<img src="${file.albumArt}" alt="Album art">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+        </svg>`;
+
     html += `
       <li class="selection-item ${isSelected ? '' : 'excluded'}" data-index="${i}">
         <input type="checkbox" ${isSelected ? 'checked' : ''}>
+        <div class="album-art">${albumArtHtml}</div>
         <div class="file-info">
           <div class="name">${file.file}</div>
           <div class="rate ${rateClass}">${statusText}</div>

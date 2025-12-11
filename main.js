@@ -97,7 +97,8 @@ ipcMain.handle('scan-folder', async (event, folderPath) => {
     for (const file of files) {
       const filePath = path.join(folderPath, file);
       const sampleRate = getMp3SampleRate(filePath);
-      results.push({ file, filePath, sampleRate });
+      const albumArt = extractAlbumArt(filePath);
+      results.push({ file, filePath, sampleRate, albumArt });
     }
 
     return { success: true, files: results };
@@ -237,4 +238,107 @@ function getMp3SampleRate(filePath) {
 function fixMp3(inputPath, outputPath, targetSampleRate) {
   const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar ${targetSampleRate} -acodec libmp3lame -q:a 0 -map_metadata 0 -id3v2_version 3 "${outputPath}"`;
   execSync(cmd, { stdio: 'ignore', windowsHide: true });
+}
+
+// Extract album art from ID3v2 tags - returns base64 data URL or null
+function extractAlbumArt(filePath) {
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const header = Buffer.alloc(10);
+      fs.readSync(fd, header, 0, 10, 0);
+
+      // Check for ID3v2 tag
+      if (header.toString('ascii', 0, 3) !== 'ID3') {
+        return null;
+      }
+
+      const tagSize = (header[6] << 21) | (header[7] << 14) | (header[8] << 7) | header[9];
+      const tagData = Buffer.alloc(tagSize);
+      fs.readSync(fd, tagData, 0, tagSize, 10);
+
+      let offset = 0;
+      const version = header[3]; // ID3v2.3 or ID3v2.4
+
+      while (offset < tagSize - 10) {
+        const frameId = tagData.toString('ascii', offset, offset + 4);
+        if (frameId === '\x00\x00\x00\x00' || frameId.charCodeAt(0) === 0) break;
+
+        let frameSize;
+        if (version === 4) {
+          // ID3v2.4 uses syncsafe integers
+          frameSize = (tagData[offset + 4] << 21) | (tagData[offset + 5] << 14) |
+                      (tagData[offset + 6] << 7) | tagData[offset + 7];
+        } else {
+          // ID3v2.3 uses regular integers
+          frameSize = (tagData[offset + 4] << 24) | (tagData[offset + 5] << 16) |
+                      (tagData[offset + 6] << 8) | tagData[offset + 7];
+        }
+
+        if (frameSize <= 0 || frameSize > tagSize - offset) break;
+
+        // APIC = Attached Picture
+        if (frameId === 'APIC') {
+          const frameData = tagData.slice(offset + 10, offset + 10 + frameSize);
+
+          // Parse APIC frame
+          let pos = 0;
+          const textEncoding = frameData[pos++];
+
+          // Read MIME type (null-terminated)
+          let mimeType = '';
+          while (pos < frameData.length && frameData[pos] !== 0) {
+            mimeType += String.fromCharCode(frameData[pos++]);
+          }
+          pos++; // Skip null terminator
+
+          // Skip picture type byte
+          pos++;
+
+          // Skip description (null-terminated, possibly UTF-16)
+          if (textEncoding === 1 || textEncoding === 2) {
+            // UTF-16, look for double null
+            while (pos < frameData.length - 1) {
+              if (frameData[pos] === 0 && frameData[pos + 1] === 0) {
+                pos += 2;
+                break;
+              }
+              pos++;
+            }
+          } else {
+            // UTF-8 or Latin-1, single null
+            while (pos < frameData.length && frameData[pos] !== 0) {
+              pos++;
+            }
+            pos++;
+          }
+
+          // Rest is image data
+          const imageData = frameData.slice(pos);
+          if (imageData.length > 0) {
+            // Determine MIME type if not specified
+            if (!mimeType || mimeType === 'image/') {
+              if (imageData[0] === 0xFF && imageData[1] === 0xD8) {
+                mimeType = 'image/jpeg';
+              } else if (imageData[0] === 0x89 && imageData[1] === 0x50) {
+                mimeType = 'image/png';
+              } else {
+                mimeType = 'image/jpeg'; // Default
+              }
+            }
+            const base64 = imageData.toString('base64');
+            return `data:${mimeType};base64,${base64}`;
+          }
+        }
+
+        offset += 10 + frameSize;
+      }
+
+      return null;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (err) {
+    return null;
+  }
 }
