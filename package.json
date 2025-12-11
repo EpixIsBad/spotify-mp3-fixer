@@ -1,0 +1,47 @@
+{
+  "name": "mp3-sample-rate-fixer",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "Fix MP3 sample rate issues for Spotify compatibility",
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win dir"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0"
+  },
+  "devDependencies": {
+    "electron": "^39.2.6",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.mp3fixer.app",
+    "productName": "MP3 Sample Rate Fixer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "node_modules/@ffmpeg-installer/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",
+        "to": "ffmpeg.exe"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": null
+    },
+    "portable": {
+      "artifactName": "MP3-Sample-Rate-Fixer.exe"
+    },
+    "asar": false
+  }
+}
