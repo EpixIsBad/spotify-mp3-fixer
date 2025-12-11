@@ -2,6 +2,8 @@
 
 A desktop application that fixes MP3 sample rate issues that cause playback problems in Spotify and other music players.
 
+This was made with the help of AI (claude), mainly for the UI/Electron portion, and any busy work like this README, Directions, Comments, etc.
+
 ![Screenshot](screenshot.png)
 
 ## The Problem
