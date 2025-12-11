@@ -8,10 +8,7 @@ This was made with the help of AI (claude), mainly for the UI/Electron portion, 
 
 ## The Problem
 
-Some MP3 files have incorrect sample rate headers - the header says one rate (e.g., 48000 Hz) but the actual audio is at a different rate (e.g., 44100 Hz). This mismatch causes:
-- Spotify refusing to play the track
-- Songs being skipped automatically
-- Playback glitches in various music players
+Some MP3 files have incorrect sample rates - certain local file songs are set to a sample rate of 48000Hz when they should be 44100Hz for Spotify. This causes spotify to not start the next track in line, once one of these 48K Hz songs finish. I am no audio professional and have no idea why its an issue but im sure theres a good reason, I found it from this (Spotify thread)[https://community.spotify.com/t5/Ongoing-Issues/Desktop-Playback-issues-with-local-files/idi-p/7023115] while trying to fix the issue on some of my Juice WRLD unrleased tracks I have downloaded.
 
 ## The Solution
 
