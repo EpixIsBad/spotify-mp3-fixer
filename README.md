@@ -45,6 +45,8 @@ See [Building from Source](#building-from-source) below.
 
 ## How to Use
 
+*Disclaimer: You will probably be prompted with a Windows SmartScreen warning since this app is newer. Click "More info" → "Run anyway" to proceed.*
+
 1. **Launch the app** - Double-click `MP3 Sample Rate Fixer.exe`
 
 2. **Select a folder** - Click "Browse" and choose a folder containing your MP3 files
