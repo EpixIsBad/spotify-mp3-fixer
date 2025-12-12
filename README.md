@@ -6,8 +6,6 @@ A desktop application that fixes MP3 sample rate issues that cause playback prob
 
 *This is also my first public project so if theres something related to the program or this github that could be better let me know!!!!*
 
-![Screenshot](screenshot.png)
-
 ## The Problem
 
 Some MP3 files have incorrect sample rates - certain local file songs are set to a sample rate of 48000Hz when they should be 44100Hz for Spotify. This causes spotify to not start the next track in line, once one of these 48K Hz songs finish. I am no audio professional and have no idea why its an issue but im sure theres a good reason (claude added an FAQ so hopefully those answers are right!). I found it from this [Spotify thread](https://community.spotify.com/t5/Ongoing-Issues/Desktop-Playback-issues-with-local-files/idi-p/7023115) while trying to fix the issue on some of my Juice WRLD unrleased tracks I have downloaded.
