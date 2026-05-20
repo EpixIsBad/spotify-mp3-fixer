@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
 // Get FFmpeg path - handles both dev and packaged scenarios
 function getFFmpegPath() {
@@ -236,8 +236,29 @@ function getMp3SampleRate(filePath) {
 }
 
 function fixMp3(inputPath, outputPath, targetSampleRate) {
-  const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -ar ${targetSampleRate} -acodec libmp3lame -q:a 0 -map_metadata 0 -id3v2_version 3 "${outputPath}"`;
-  execSync(cmd, { stdio: 'ignore', windowsHide: true });
+  const cmd = spawnSync(ffmpegPath, [
+    '-y', 
+    '-i', 
+    inputPath, 
+    '-ar', String(targetSampleRate), 
+    -acodec, libmp3lame, 
+    '-q:a', '0',
+    '-map_metadata', '0', 
+    '-id3v2_version', '3', 
+      outputPath
+    ], {
+      encoding: 'utf-8',
+      windowsHide: true
+    }
+  );
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `FFmpeg failed with status ${result.status}`);
+  }
 }
 
 // Extract album art from ID3v2 tags - returns base64 data URL or null
