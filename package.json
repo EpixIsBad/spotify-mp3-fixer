@@ -10,7 +10,8 @@
     "build": "electron-builder --win dir"
   },
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0"
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2"
   },
   "devDependencies": {
     "electron": "^39.2.6",
@@ -33,6 +34,10 @@
       {
         "from": "node_modules/@ffmpeg-installer/win32-x64/ffmpeg.exe",
         "to": "ffmpeg.exe"
+      },
+      {
+        "from": "node_modules/@ffprobe-installer/win32-x64/ffprobe.exe",
+        "to": "ffprobe.exe"
       }
     ],
     "win": {

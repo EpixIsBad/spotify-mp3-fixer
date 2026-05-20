@@ -6,18 +6,27 @@ const { execSync, spawnSync } = require('child_process');
 
 // Get FFmpeg path - handles both dev and packaged scenarios
 function getFFmpegPath() {
-  // Check for extraResources location (packaged app)
   const extraResourcesPath = path.join(process.resourcesPath || '', 'ffmpeg.exe');
+
   if (fs.existsSync(extraResourcesPath)) {
     return extraResourcesPath;
   }
 
-  // Fallback to @ffmpeg-installer (dev mode)
-  const bundledFfmpegPath = require('@ffmpeg-installer/ffmpeg').path;
-  return bundledFfmpegPath;
+  return require('@ffmpeg-installer/ffmpeg').path;
+}
+
+function getFFprobePath() {
+  const extraResourcesPath = path.join(process.resourcesPath || '', 'ffprobe.exe');
+
+  if (fs.existsSync(extraResourcesPath)) {
+    return extraResourcesPath;
+  }
+
+  return require('@ffprobe-installer/ffprobe').path;
 }
 
 const ffmpegPath = getFFmpegPath();
+const ffprobePath = getFFProbePath();
 
 // Sample rate lookup table
 const SAMPLE_RATES = {
@@ -197,42 +206,23 @@ ipcMain.handle('window-close', () => {
 // MP3 Functions
 
 function getMp3SampleRate(filePath) {
-  const fd = fs.openSync(filePath, 'r');
-  try {
-    let offset = 0;
-    const id3Header = Buffer.alloc(10);
-    fs.readSync(fd, id3Header, 0, 10, 0);
+    const cmd = spawnSync(ffprobePath, [
+    '-v', 'error',
+    '-select_streams', 'a:0',
+    '-show_entries', 'stream=sample_rate',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    filePath
+  ], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
 
-    if (id3Header.toString('ascii', 0, 3) === 'ID3') {
-      const size = (id3Header[6] << 21) | (id3Header[7] << 14) |
-                   (id3Header[8] << 7) | id3Header[9];
-      offset = size + 10;
-    }
-
-    const searchBuffer = Buffer.alloc(4096);
-    fs.readSync(fd, searchBuffer, 0, 4096, offset);
-
-    for (let i = 0; i < searchBuffer.length - 4; i++) {
-      if (searchBuffer[i] === 0xFF && (searchBuffer[i + 1] & 0xE0) === 0xE0) {
-        const b1 = searchBuffer[i + 1];
-        const b2 = searchBuffer[i + 2];
-        const versionBits = (b1 >> 3) & 0x03;
-        const sampleRateIndex = (b2 >> 2) & 0x03;
-
-        let versionIndex;
-        if (versionBits === 3) versionIndex = 0;
-        else if (versionBits === 2) versionIndex = 1;
-        else if (versionBits === 0) versionIndex = 2;
-        else continue;
-
-        const sampleRate = SAMPLE_RATES[sampleRateIndex]?.[versionIndex];
-        if (sampleRate) return sampleRate;
-      }
-    }
+  if (cmd.error || cmd.status !== 0) {
     return null;
-  } finally {
-    fs.closeSync(fd);
   }
+
+  const sampleRate = parseInt(cmd.stdout.trim(), 10);
+  return Number.isFinite(sampleRate) ? sampleRate : null;
 }
 
 function fixMp3(inputPath, outputPath, targetSampleRate) {
