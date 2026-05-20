@@ -172,7 +172,7 @@ ipcMain.handle('fix-files', async (event, { folderPath, files, targetRate, outpu
       if (outputMode === 'separate') {
         outputPath = path.join(outputFolder, file);
       } else {
-        outputPath = filePath + '.tmp';
+        outputPath = `${filePath}.tmp.mp3`;
       }
 
       // Convert file
@@ -180,12 +180,21 @@ ipcMain.handle('fix-files', async (event, { folderPath, files, targetRate, outpu
 
       // Handle replace modes
       if (outputMode === 'backup') {
-        const backupPath = path.join(backupFolder, file);
+        const backupPath = getAvailablePath(path.join(backupFolder, file));
         fs.renameSync(filePath, backupPath);
         fs.renameSync(outputPath, filePath);
       } else if (outputMode === 'replace') {
-        fs.unlinkSync(filePath);
-        fs.renameSync(outputPath, filePath);
+        const originalTempPath = `${filePath}.original.tmp`;
+        fs.renameSync(filePath, originalTempPath);
+        try {
+          fs.renameSync(outputPath, filePath);
+          fs.unlinkSync(originalTempPath);
+        } catch (err) {
+          if (fs.existsSync(originalTempPath) && !fs.existsSync(filePath)) {
+            fs.renameSync(originalTempPath, filePath);
+          }
+          throw err;
+        }
       }
 
       results.success++;
@@ -193,9 +202,13 @@ ipcMain.handle('fix-files', async (event, { folderPath, files, targetRate, outpu
       results.failed++;
       results.errors.push({ file, error: err.message });
       // Clean up temp file if exists
-      const tempPath = filePath + '.tmp';
+      const tempPath = `${filePath}.tmp.mp3`;
       if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
+      }
+      const originalTempPath = `${filePath}.original.tmp`;
+      if (fs.existsSync(originalTempPath) && !fs.existsSync(filePath)) {
+        fs.renameSync(originalTempPath, filePath);
       }
     }
   }
@@ -300,6 +313,7 @@ function fixMp3(inputPath, outputPath, targetSampleRate) {
       '-q:a', '0',
       '-map_metadata', '0', 
       '-id3v2_version', '3', 
+      '-f', 'mp3',
       outputPath
     ], {
       windowsHide: true
@@ -321,6 +335,23 @@ function fixMp3(inputPath, outputPath, targetSampleRate) {
       }
     });
   });
+}
+
+function getAvailablePath(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return filePath;
+  }
+
+  const parsed = path.parse(filePath);
+  let counter = 1;
+  let candidate;
+
+  do {
+    candidate = path.join(parsed.dir, `${parsed.name} (${counter})${parsed.ext}`);
+    counter++;
+  } while (fs.existsSync(candidate));
+
+  return candidate;
 }
 
 // Extract album art from ID3v2 tags - returns base64 data URL or null

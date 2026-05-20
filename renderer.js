@@ -418,6 +418,7 @@ async function fixFiles() {
 
     // Refresh file list
     await scanFolder(currentFolder);
+    showStatus(message, result.failed > 0 ? 'error' : 'success');
 
   } catch (err) {
     progressContainer.classList.remove('active');
