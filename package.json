@@ -1,6 +1,6 @@
 {
   "name": "mp3-sample-rate-fixer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "main.js",
   "description": "Fix MP3 sample rate issues for Spotify compatibility",
   "author": "",
