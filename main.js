@@ -142,7 +142,7 @@ ipcMain.handle('fix-files', async (event, { folderPath, files, targetRate, outpu
       }
 
       // Convert file
-      fixMp3(filePath, outputPath, targetRate);
+      await fixMp3(filePath, outputPath, targetRate);
 
       // Handle replace modes
       if (outputMode === 'backup') {
@@ -236,29 +236,37 @@ function getMp3SampleRate(filePath) {
 }
 
 function fixMp3(inputPath, outputPath, targetSampleRate) {
-  const cmd = spawnSync(ffmpegPath, [
-    '-y', 
-    '-i', 
-    inputPath, 
-    '-ar', String(targetSampleRate), 
-    -acodec, libmp3lame, 
-    '-q:a', '0',
-    '-map_metadata', '0', 
-    '-id3v2_version', '3', 
+  return new Promise((resolve, reject) => {
+    const cmd = spawn(ffmpegPath, [
+      '-y', 
+      '-i', 
+      inputPath, 
+      '-ar', String(targetSampleRate), 
+      -acodec, libmp3lame, 
+      '-q:a', '0',
+      '-map_metadata', '0', 
+      '-id3v2_version', '3', 
       outputPath
     ], {
-      encoding: 'utf-8',
       windowsHide: true
-    }
-  );
+    });
 
-  if (result.error) {
-    throw result.error;
-  }
+    let stderr = '';
 
-  if (result.status !== 0) {
-    throw new Error(result.stderr || `FFmpeg failed with status ${result.status}`);
-  }
+    cmd.stderr.on('data', data => {
+      stderr += data.toString();
+    });
+
+    cmd.on('error', reject);
+
+    cmd.on('close', code => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(stderr || `FFmpeg failed with code ${code}`));
+      }
+    });
+  });
 }
 
 // Extract album art from ID3v2 tags - returns base64 data URL or null
