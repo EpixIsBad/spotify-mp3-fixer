@@ -38,6 +38,15 @@ let currentFolder = null;
 let scannedFiles = [];
 let selectedFiles = new Set(); // Track selected file indices
 let tempSelection = new Set(); // Temporary selection while modal is open
+const albumArtCache = new Map();
+let albumArtObserver = null;
+let currentScanId = null;
+
+const musicIconSvg = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+  </svg>
+`;
 
 // Event Listeners
 selectFolderBtn.addEventListener('click', selectFolder);
@@ -65,6 +74,50 @@ window.api.onProgress((data) => {
   progressStatus.textContent = `Processing: ${data.file}`;
 });
 
+window.api.onScanStarted((data) => {
+  currentScanId = data.scanId;
+  scannedFiles = [];
+  selectedFiles.clear();
+  albumArtCache.clear();
+  resetAlbumArtObserver();
+
+  fileListEl.innerHTML = '';
+  totalFilesEl.textContent = data.total;
+  needsFixEl.textContent = 0;
+  alreadyOkEl.textContent = 0;
+  statsEl.style.display = data.total > 0 ? 'flex' : 'none';
+  selectTracksBtn.disabled = true;
+  fixBtn.disabled = true;
+  fixBtn.textContent = 'Fix Files';
+
+  if (data.total === 0) {
+    showEmptyFileList('No MP3 files found in this folder');
+  }
+});
+
+window.api.onScanFile((file) => {
+  if (file.scanId !== currentScanId) return;
+
+  scannedFiles[file.index] = file;
+  appendFileRow(file);
+  updateStatsAndActions();
+});
+
+window.api.onScanFileUpdated((data) => {
+  if (data.scanId !== currentScanId || !scannedFiles[data.index]) return;
+
+  Object.assign(scannedFiles[data.index], data);
+  updateFileRow(data.index);
+  updateStatsAndActions();
+});
+
+window.api.onScanComplete(() => {
+  refreshBtn.disabled = false;
+  selectFolderBtn.disabled = false;
+  selectTracksBtn.disabled = scannedFiles.length === 0;
+  updateStatsAndActions();
+});
+
 async function selectFolder() {
   const folder = await window.api.selectFolder();
   if (folder) {
@@ -83,41 +136,23 @@ async function scanFolder(folder) {
   refreshBtn.disabled = true;
   fixBtn.disabled = true;
   selectTracksBtn.disabled = true;
+  selectFolderBtn.disabled = true;
 
   const result = await window.api.scanFolder(folder);
 
   if (!result.success) {
     showStatus(`Error: ${result.error}`, 'error');
+    refreshBtn.disabled = false;
+    selectFolderBtn.disabled = false;
     return;
   }
-
-  scannedFiles = result.files;
-
-  // Reset selection - select all files that need fixing by default
-  selectedFiles.clear();
-  const targetRate = parseInt(targetRateEl.value);
-  scannedFiles.forEach((file, index) => {
-    if (file.sampleRate !== targetRate) {
-      selectedFiles.add(index);
-    }
-  });
-
-  updateFileList();
-  refreshBtn.disabled = false;
 }
 
 function updateFileList() {
   const targetRate = parseInt(targetRateEl.value);
 
   if (scannedFiles.length === 0) {
-    fileListEl.innerHTML = `
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-        </svg>
-        <p>No MP3 files found in this folder</p>
-      </div>
-    `;
+    showEmptyFileList('No MP3 files found in this folder');
     statsEl.style.display = 'none';
     fixBtn.disabled = true;
     selectTracksBtn.disabled = true;
@@ -127,7 +162,7 @@ function updateFileList() {
   // Update selection based on new target rate
   selectedFiles.clear();
   scannedFiles.forEach((file, index) => {
-    if (file.sampleRate !== targetRate) {
+    if (!file.sampleRatePending && file.sampleRate !== targetRate) {
       selectedFiles.add(index);
     }
   });
@@ -142,7 +177,10 @@ function updateFileList() {
     let rateClass = '';
     let rateText = '';
 
-    if (file.sampleRate === null) {
+    if (file.sampleRatePending) {
+      rateClass = 'unknown';
+      rateText = 'Checking...';
+    } else if (file.sampleRate === null) {
       rateClass = 'unknown';
       rateText = 'Unknown';
       needsFix++;
@@ -155,22 +193,17 @@ function updateFileList() {
       alreadyOk++;
     }
 
-    const albumArtHtml = file.albumArt
-      ? `<img src="${file.albumArt}" alt="Album art">`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-        </svg>`;
-
     html += `
       <div class="file-item">
-        <div class="file-album-art">${albumArtHtml}</div>
-        <div class="file-name" title="${file.file}">${file.file}</div>
+        <div class="file-album-art" data-art-index="${i}">${musicIconSvg}</div>
+        <div class="file-name" title="${escapeHtml(file.file)}">${escapeHtml(file.file)}</div>
         <div class="file-rate ${rateClass}">${rateText}</div>
       </div>
     `;
   }
 
   fileListEl.innerHTML = html;
+  observeAlbumArt(fileListEl, '.file-album-art[data-art-index]', fileListEl);
 
   // Update stats
   totalFilesEl.textContent = scannedFiles.length;
@@ -205,23 +238,21 @@ function openSelectionModal() {
   for (let i = 0; i < scannedFiles.length; i++) {
     const file = scannedFiles[i];
     const isSelected = tempSelection.has(i);
-    const needsFixing = file.sampleRate !== targetRate;
+    const needsFixing = !file.sampleRatePending && file.sampleRate !== targetRate;
     const rateClass = needsFixing ? 'needs-fix' : '';
-    const rateText = file.sampleRate ? `${file.sampleRate} Hz` : 'Unknown';
-    const statusText = needsFixing ? `${rateText} → ${targetRate} Hz` : `${rateText} (OK)`;
-
-    const albumArtHtml = file.albumArt
-      ? `<img src="${file.albumArt}" alt="Album art">`
-      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
-        </svg>`;
+    const rateText = getRateText(file);
+    const statusText = file.sampleRatePending
+      ? rateText
+      : needsFixing
+        ? `${rateText} → ${targetRate} Hz`
+        : `${rateText} (OK)`;
 
     html += `
       <li class="selection-item ${isSelected ? '' : 'excluded'}" data-index="${i}">
         <input type="checkbox" ${isSelected ? 'checked' : ''}>
-        <div class="album-art">${albumArtHtml}</div>
+        <div class="album-art" data-art-index="${i}">${musicIconSvg}</div>
         <div class="file-info">
-          <div class="name">${file.file}</div>
+          <div class="name">${escapeHtml(file.file)}</div>
           <div class="rate ${rateClass}">${statusText}</div>
         </div>
       </li>
@@ -243,6 +274,7 @@ function openSelectionModal() {
   });
 
   selectionModal.classList.add('active');
+  observeAlbumArt(selectionList, '.album-art[data-art-index]', selectionModal);
 }
 
 function closeModal() {
@@ -287,7 +319,7 @@ function selectNeedsFixOnly() {
   tempSelection.clear();
 
   scannedFiles.forEach((file, index) => {
-    if (file.sampleRate !== targetRate) {
+    if (!file.sampleRatePending && file.sampleRate !== targetRate) {
       tempSelection.add(index);
     }
   });
@@ -405,4 +437,192 @@ function showStatus(message, type) {
 
 function hideStatus() {
   statusMessage.className = 'status-message';
+}
+
+function appendFileRow(file) {
+  if (fileListEl.querySelector('.empty-state')) {
+    fileListEl.innerHTML = '';
+  }
+
+  const row = document.createElement('div');
+  row.className = 'file-item';
+  row.dataset.index = file.index;
+
+  const art = document.createElement('div');
+  art.className = 'file-album-art';
+  art.dataset.artIndex = file.index;
+  art.innerHTML = musicIconSvg;
+
+  const name = document.createElement('div');
+  name.className = 'file-name';
+  name.title = file.file;
+  name.textContent = file.file;
+
+  const rate = document.createElement('div');
+  rate.className = 'file-rate unknown';
+  rate.textContent = getRateText(file);
+
+  row.append(art, name, rate);
+  fileListEl.appendChild(row);
+  observeAlbumArtElement(art, fileListEl);
+}
+
+function updateFileRow(index) {
+  const file = scannedFiles[index];
+  const row = fileListEl.querySelector(`.file-item[data-index="${index}"]`);
+  if (!file || !row) return;
+
+  const rate = row.querySelector('.file-rate');
+  const meta = getRateMeta(file);
+  rate.className = `file-rate ${meta.rateClass}`;
+  rate.textContent = meta.rateText;
+}
+
+function updateStatsAndActions() {
+  const targetRate = parseInt(targetRateEl.value);
+  let needsFix = 0;
+  let alreadyOk = 0;
+
+  selectedFiles.clear();
+
+  scannedFiles.forEach((file, index) => {
+    if (!file || file.sampleRatePending) return;
+
+    if (file.sampleRate !== targetRate) {
+      needsFix++;
+      selectedFiles.add(index);
+    } else {
+      alreadyOk++;
+    }
+  });
+
+  totalFilesEl.textContent = scannedFiles.length;
+  needsFixEl.textContent = needsFix;
+  alreadyOkEl.textContent = alreadyOk;
+  statsEl.style.display = scannedFiles.length > 0 ? 'flex' : 'none';
+  selectTracksBtn.disabled = scannedFiles.length === 0;
+  fixBtn.disabled = selectedFiles.size === 0;
+  fixBtn.textContent = selectedFiles.size > 0
+    ? `Fix ${selectedFiles.size} File${selectedFiles.size > 1 ? 's' : ''}`
+    : 'Fix Files';
+}
+
+function getRateMeta(file) {
+  const targetRate = parseInt(targetRateEl.value);
+
+  if (file.sampleRatePending) {
+    return { rateClass: 'unknown', rateText: 'Checking...' };
+  }
+
+  if (file.sampleRate === null) {
+    return { rateClass: 'unknown', rateText: 'Unknown' };
+  }
+
+  if (file.sampleRate !== targetRate) {
+    return { rateClass: 'needs-fix', rateText: `${file.sampleRate} Hz` };
+  }
+
+  return { rateClass: '', rateText: `${file.sampleRate} Hz` };
+}
+
+function getRateText(file) {
+  return getRateMeta(file).rateText;
+}
+
+function showEmptyFileList(message) {
+  fileListEl.innerHTML = `
+    <div class="empty-state">
+      ${musicIconSvg}
+      <p>${escapeHtml(message)}</p>
+    </div>
+  `;
+}
+
+function resetAlbumArtObserver() {
+  if (albumArtObserver) {
+    albumArtObserver.disconnect();
+    albumArtObserver = null;
+  }
+}
+
+function observeAlbumArt(container, selector, root) {
+  resetAlbumArtObserver();
+
+  if (!window.api.getAlbumArt || !('IntersectionObserver' in window)) {
+    container.querySelectorAll(selector).forEach(el => {
+      loadAlbumArt(Number(el.dataset.artIndex), el);
+    });
+    return;
+  }
+
+  createAlbumArtObserver(root);
+
+  container.querySelectorAll(selector).forEach(el => albumArtObserver.observe(el));
+}
+
+function observeAlbumArtElement(artEl, root) {
+  if (!window.api.getAlbumArt || !('IntersectionObserver' in window)) {
+    loadAlbumArt(Number(artEl.dataset.artIndex), artEl);
+    return;
+  }
+
+  createAlbumArtObserver(root);
+  albumArtObserver.observe(artEl);
+}
+
+function createAlbumArtObserver(root) {
+  if (albumArtObserver) return;
+
+  albumArtObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+
+      const artEl = entry.target;
+      albumArtObserver.unobserve(artEl);
+      loadAlbumArt(Number(artEl.dataset.artIndex), artEl);
+    });
+  }, {
+    root,
+    rootMargin: '120px'
+  });
+}
+
+async function loadAlbumArt(index, artEl) {
+  const file = scannedFiles[index];
+  if (!file || !artEl) return;
+
+  if (albumArtCache.has(file.filePath)) {
+    renderAlbumArt(artEl, albumArtCache.get(file.filePath));
+    return;
+  }
+
+  albumArtCache.set(file.filePath, null);
+
+  const result = await window.api.getAlbumArt(file.filePath);
+  const albumArt = result.success ? result.albumArt : null;
+
+  albumArtCache.set(file.filePath, albumArt);
+  file.albumArt = albumArt;
+  file.albumArtLoaded = true;
+
+  renderAlbumArt(artEl, albumArt);
+}
+
+function renderAlbumArt(artEl, albumArt) {
+  if (!albumArt) return;
+
+  artEl.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = albumArt;
+  img.alt = 'Album art';
+  artEl.appendChild(img);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }

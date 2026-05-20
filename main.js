@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execSync, spawnSync } = require('child_process');
+const { spawn } = require('child_process');
 
 // Get FFmpeg path - handles both dev and packaged scenarios
 function getFFmpegPath() {
@@ -15,7 +15,7 @@ function getFFmpegPath() {
   return require('@ffmpeg-installer/ffmpeg').path;
 }
 
-function getFFprobePath() {
+function getFFProbePath() {
   const extraResourcesPath = path.join(process.resourcesPath || '', 'ffprobe.exe');
 
   if (fs.existsSync(extraResourcesPath)) {
@@ -37,6 +37,7 @@ const SAMPLE_RATES = {
 };
 
 let mainWindow;
+let activeScanId = 0;
 
 function createWindow() {
   // Get screen dimensions and calculate 90%
@@ -101,18 +102,42 @@ ipcMain.handle('scan-folder', async (event, folderPath) => {
     const files = fs.readdirSync(folderPath)
       .filter(file => file.toLowerCase().endsWith('.mp3'));
 
-    const results = [];
+    const scanId = ++activeScanId;
+    const sender = event.sender;
 
-    for (const file of files) {
-      const filePath = path.join(folderPath, file);
-      const sampleRate = getMp3SampleRate(filePath);
-      const albumArt = extractAlbumArt(filePath);
-      results.push({ file, filePath, sampleRate, albumArt });
-    }
+    sender.send('scan-started', { scanId, total: files.length });
 
-    return { success: true, files: results };
+    const scanItems = files.map((file, index) => {
+      const scannedFile = {
+        scanId,
+        index,
+        file,
+        filePath: path.join(folderPath, file),
+        sampleRate: null,
+        sampleRatePending: true,
+        albumArt: null,
+        albumArtLoaded: false
+      };
+
+      sender.send('scan-file', scannedFile);
+      return scannedFile;
+    });
+
+    scanSampleRates(scanId, sender, scanItems);
+
+    return { success: true, total: files.length };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('get-album-art', async (event, filePath) => {
+  try {
+    const albumArt = extractAlbumArt(filePath);
+
+    return { success: true, albumArt };
+  } catch (err) {
+    return { success: false, error: err.message, albumArt: null };
   }
 });
 
@@ -205,24 +230,63 @@ ipcMain.handle('window-close', () => {
 
 // MP3 Functions
 
-function getMp3SampleRate(filePath) {
-    const cmd = spawnSync(ffprobePath, [
-    '-v', 'error',
-    '-select_streams', 'a:0',
-    '-show_entries', 'stream=sample_rate',
-    '-of', 'default=noprint_wrappers=1:nokey=1',
-    filePath
-  ], {
-    encoding: 'utf8',
-    windowsHide: true
-  });
+async function scanSampleRates(scanId, sender, scanItems) {
+  const concurrency = 4;
+  let nextIndex = 0;
 
-  if (cmd.error || cmd.status !== 0) {
-    return null;
+  async function worker() {
+    while (nextIndex < scanItems.length && scanId === activeScanId) {
+      const item = scanItems[nextIndex++];
+      const sampleRate = await getMp3SampleRate(item.filePath);
+
+      if (scanId !== activeScanId || sender.isDestroyed()) return;
+
+      sender.send('scan-file-updated', {
+        scanId,
+        index: item.index,
+        sampleRate,
+        sampleRatePending: false
+      });
+    }
   }
 
-  const sampleRate = parseInt(cmd.stdout.trim(), 10);
-  return Number.isFinite(sampleRate) ? sampleRate : null;
+  await Promise.all(Array.from({ length: Math.min(concurrency, scanItems.length) }, worker));
+
+  if (scanId === activeScanId && !sender.isDestroyed()) {
+    sender.send('scan-complete', { scanId });
+  }
+}
+
+function getMp3SampleRate(filePath) {
+  return new Promise((resolve) => {
+    const cmd = spawn(ffprobePath, [
+      '-v', 'error',
+      '-select_streams', 'a:0',
+      '-show_entries', 'stream=sample_rate',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ], {
+      windowsHide: true
+    });
+
+    let stdout = '';
+
+    cmd.stdout.on('data', data => {
+      stdout += data.toString();
+    });
+
+    cmd.on('error', () => resolve(null));
+
+    cmd.on('close', code => {
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+
+      const sampleRate = parseInt(stdout.trim(), 10);
+      resolve(Number.isFinite(sampleRate) ? sampleRate : null);
+    });
+  });
 }
 
 function fixMp3(inputPath, outputPath, targetSampleRate) {
@@ -232,7 +296,7 @@ function fixMp3(inputPath, outputPath, targetSampleRate) {
       '-i', 
       inputPath, 
       '-ar', String(targetSampleRate), 
-      -acodec, libmp3lame, 
+      '-acodec', 'libmp3lame',
       '-q:a', '0',
       '-map_metadata', '0', 
       '-id3v2_version', '3', 

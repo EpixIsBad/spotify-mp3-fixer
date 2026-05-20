@@ -28,7 +28,8 @@
       "preload.js",
       "renderer.js",
       "index.html",
-      "node_modules/@ffmpeg-installer/**/*"
+      "node_modules/@ffmpeg-installer/**/*",
+      "node_modules/@ffprobe-installer/**/*"
     ],
     "extraResources": [
       {
