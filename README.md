@@ -2,11 +2,9 @@
 
 A desktop application that fixes MP3 sample rate issues that cause playback problems in Spotify and other music players.
 
-**This was made with the help of AI (claude), mainly for the UI/Electron portion, some code tune up, FFmpeg, and any busy work like this README, Directions, Comments, etc.**
+**This was made with the help of AI (claude), mainly for the stuff after I didnt need it to be a command line tool in my vscode --> UI/Electron portion, some code tune up, FFmpeg, and any busy work like this README, Directions, Comments, etc.**
 
 *This is also my first public project so if theres something related to the program or this github that could be better let me know!!!!*
-
-![Screenshot](screenshot.png)
 
 ## The Problem
 
@@ -44,6 +42,8 @@ Download the latest release from the [Releases](../../releases) page.
 See [Building from Source](#building-from-source) below.
 
 ## How to Use
+
+*Disclaimer: You will probably be prompted with a Windows SmartScreen warning since this app is newer. Click "More info" → "Run anyway" to proceed.*
 
 1. **Launch the app** - Double-click `MP3 Sample Rate Fixer.exe`
 
